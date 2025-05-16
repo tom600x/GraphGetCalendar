@@ -1,57 +1,107 @@
 # GraphGetCalendar
 
-This .NET 8.0 console application logs in to Microsoft Graph using username and password (MFA off), fetches events from a shared calendar, and saves them to a SQL Server database using `SqlConnection`. All configuration is in `appsettings.json`.
+A .NET 8.0 console application to log in to Microsoft Graph using username/password, retrieve events from a user or shared calendar, and save them to a SQL Server database. All configuration is managed via `appsettings.json` and optionally `appsecrets.json` for sensitive data.
 
-## appsettings.json Example
+## Features
+- Authenticate to Microsoft Graph using username/password (MFA off, MSAL)
+- Retrieve calendar events for a specified user or shared calendar (with correct permissions)
+- Save events to SQL Server using parameterized queries (no Entity Framework)
+- All configuration (credentials, SQL, calendar, debug) in `appsettings.json` or `appsecrets.json`
+- Debug modes for login testing, displaying events, and listing visible calendars
+- Dependency injection and configuration via Microsoft.Extensions
+
+## Configuration
+
+### appsettings.json
 ```json
 {
   "Graph": {
     "UserId": "user@domain.com",
-    "Password": "<your password>",
-    "ClientId": "<your client id>",
-    "TenantId": "<your tenant id>"
+    "Password": "yourpassword", // recommend moving to appsecrets.json
+    "ClientId": "your-client-id",
+    "TenantId": "your-tenant-id"
   },
   "ConnectionStrings": {
     "SqlServer": "Server=YOUR_SERVER;Database=YOUR_DB;User Id=YOUR_USER;Password=YOUR_PASSWORD;Encrypt=True;TrustServerCertificate=True;"
   },
   "Calendar": {
-    "SharedCalendarEmail": "sharedmailboxname@domain.com",
+    "SharedCalendarEmail": "user-or-shared@domain.com",
     "MonthsBefore": 1,
     "MonthsAfter": 1
   },
   "Debug": {
     "Login": false,
-    "DisplayCalendar": true
+    "DisplayCalendar": false,
+    "ListCalendars": false
   }
 }
 ```
 
-## Settings
-- **Graph.UserId**: The user email to authenticate with Microsoft Graph.
-- **Graph.Password**: The password for the user (MFA must be off).
-- **Graph.ClientId**: Azure AD Application (client) ID.
-- **Graph.TenantId**: Azure AD Directory (tenant) ID.
-- **ConnectionStrings.SqlServer**: SQL Server connection string.
-- **Calendar.SharedCalendarEmail**: The email address of the calendar to fetch events from.
-- **Calendar.MonthsBefore**: Number of months before today to include in the query.
-- **Calendar.MonthsAfter**: Number of months after today to include in the query.
-- **Debug.Login**: If true, only test login and display user info (no calendar or DB actions).
-- **Debug.DisplayCalendar**: If true, print calendar events to the console instead of saving to the database.
+### appsecrets.json
+- Optional. If present, overrides values in `appsettings.json`.
+- Use for sensitive data (passwords, connection strings, etc.).
+- **Do not commit to source control!**
+- Example:
+```json
+{
+  "Graph": {
+    "UserId": "user@domain.com",
+    "Password": "yourpassword",
+    "ClientId": "your-client-id",
+    "TenantId": "your-tenant-id"
+  },
+  "ConnectionStrings": {
+    "SqlServer": "Server=YOUR_SERVER;Database=YOUR_DB;User Id=YOUR_USER;Password=YOUR_PASSWORD;Encrypt=True;TrustServerCertificate=True;"
+  },
+  "Calendar": {
+    "SharedCalendarEmail": "user-or-shared@domain.com",
+    "MonthsBefore": 1,
+    "MonthsAfter": 1
+  },
+  "Debug": {
+    "Login": false,
+    "DisplayCalendar": false,
+    "ListCalendars": false
+  }
+}
+```
+
+## Debug Options
+- `Debug:Login`: If true, only tests login and prints user info.
+- `Debug:DisplayCalendar`: If true, prints calendar events to console instead of saving to SQL.
+- `Debug:ListCalendars`: If true, lists all calendars visible to the login user (for troubleshooting shared calendar access).
+
+## Database Table
+To save calendar events, create the following table in your SQL Server database:
+
+```sql
+CREATE TABLE CalendarEvents (
+    Id INT IDENTITY(1,1) PRIMARY KEY,
+    Subject NVARCHAR(255),
+    StartTime NVARCHAR(50),
+    EndTime NVARCHAR(50),
+    Organizer NVARCHAR(255),
+    Location NVARCHAR(255),
+    BodyPreview NVARCHAR(MAX)
+);
+```
+- `StartTime` and `EndTime` are stored as strings in ISO 8601 format (as returned by Microsoft Graph).
+- Adjust column sizes/types as needed for your requirements.
 
 ## Usage
-1. Update `appsettings.json` with your credentials, Azure AD app info, and SQL Server connection string.
-2. Set the debug options as needed:
-   - Set `Debug.Login` to `true` to test login only.
-   - Set `Debug.DisplayCalendar` to `true` to print calendar events to the console.
-3. Build and run the application:
+1. Configure `appsettings.json` (and optionally `appsecrets.json`).
+2. Build and run:
    ```powershell
    dotnet build
    dotnet run
    ```
+3. Use debug options as needed for troubleshooting.
 
-## Security Notes
-- Do not hardcode credentials in code. Use `appsettings.json` or a secure store (e.g., Azure Key Vault) in production.
-- Ensure MFA is disabled for the user account used for authentication.
+## Security
+- Place sensitive data in `appsecrets.json` (which is in `.gitignore` by default).
+- Never commit secrets to source control.
 
-## Disclaimer
-- Username/password authentication is not recommended for production. Use modern auth flows (device code, interactive, managed identity) when possible.
+## Notes
+- The app only supports user or shared calendars that are visible to the login user.
+- For shared mailboxes, ensure the login user has full access and the mailbox is visible in their calendar list.
+- If you encounter errors, use `Debug:ListCalendars` to verify calendar visibility.
